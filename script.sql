@@ -1,32 +1,36 @@
--- -- Desactiva restricciones para poder borrar en orden
--- EXEC sp_MSforeachtable 
---     'ALTER TABLE ? NOCHECK CONSTRAINT ALL'
+-- Desactiva restricciones para poder borrar en orden
+EXEC sp_MSforeachtable 
+    'ALTER TABLE ? NOCHECK CONSTRAINT ALL'
 
--- -- Elimina todas las tablas del esquema CNEJ
--- DECLARE @sql NVARCHAR(MAX) = N'';
+Elimina todas las tablas del esquema CNEJ
+DECLARE @sql NVARCHAR(MAX) = N'';
 
--- SELECT @sql += 'DROP TABLE CNEJ.[' + t.name + '];' + CHAR(13)
--- FROM sys.tables t
--- JOIN sys.schemas s ON t.schema_id = s.schema_id
--- WHERE s.name = 'CNEJ';
+SELECT @sql += 'DROP TABLE CNEJ.[' + t.name + '];' + CHAR(13)
+FROM sys.tables t
+JOIN sys.schemas s ON t.schema_id = s.schema_id
+WHERE s.name = 'CNEJ';
 
--- EXEC sp_executesql @sql;
+EXEC sp_executesql @sql;
+
+-- EXEC sp_MSforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT ALL';
 
 USE [GD1C2025]
 GO
 
-CREATE SCHEMA [CNEJ]
-GO
+-- CREATE SCHEMA [CNEJ]
+-- GO
 
 ------------------ TABLAS MAESTRAS (SIN DEPENDENCIAS) --------------------------
 
 CREATE TABLE CNEJ.Provincia (
-    pro_numero NVARCHAR(255),
+    pro_nombre NVARCHAR(255),
+    pro_numero BIGINT,
     PRIMARY KEY(pro_numero)
 );
 
 CREATE TABLE CNEJ.Localidad (
-    loc_numero NVARCHAR(255),
+    loc_nombre NVARCHAR(255),
+    loc_numero BIGINT,
     PRIMARY KEY(loc_numero)
 );
 
@@ -78,8 +82,8 @@ CREATE TABLE CNEJ.Sillon (
 
 CREATE TABLE CNEJ.Cliente (
     cli_dni BIGINT,
-    cli_provincia NVARCHAR(255),
-    cli_localidad NVARCHAR(255),
+    cli_provincia BIGINT,
+    cli_localidad BIGINT,
     cli_contacto BIGINT,
     cli_nombre NVARCHAR(255),
     cli_apellido NVARCHAR(255),
@@ -93,8 +97,8 @@ CREATE TABLE CNEJ.Cliente (
 
 CREATE TABLE CNEJ.Sucursal (
     suc_numero BIGINT,
-    suc_provincia NVARCHAR(255),
-    suc_localidad NVARCHAR(255),
+    suc_provincia BIGINT,
+    suc_localidad BIGINT,
     suc_contacto BIGINT,
     suc_direccion NVARCHAR(255),
     PRIMARY KEY(suc_numero),
@@ -176,8 +180,8 @@ CREATE TABLE CNEJ.Envio (
 CREATE TABLE CNEJ.Proveedor (
     pro_cuit NVARCHAR(255),
     pro_contacto BIGINT,
-    pro_provincia NVARCHAR(255),
-    pro_localidad NVARCHAR(255),
+    pro_provincia BIGINT,
+    pro_localidad BIGINT,
     pro_razon_social NVARCHAR(255),
     pro_direccion NVARCHAR(255),
     PRIMARY KEY(pro_cuit),
