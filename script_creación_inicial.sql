@@ -237,6 +237,10 @@ EXEC sp_MSforeachtable
     ';
 GO
 
+CREATE PROCEDURE sp_Migrar_Dimensiones AS
+BEGIN
+SET NOCOUNT ON;
+
 ;WITH CTE_Contactos AS (
     SELECT DISTINCT
         Cliente_Telefono   AS telefono,
@@ -266,7 +270,6 @@ SELECT
     telefono,
     mail
 FROM CTE_Contactos;
-GO
 
 ;WITH DistinctProvincia AS (
     SELECT DISTINCT Sucursal_Provincia AS nombre
@@ -290,7 +293,6 @@ SELECT
     ROW_NUMBER() OVER (ORDER BY nombre) AS pro_numero,
     nombre AS pro_nombre
 FROM DistinctProvincia;
-GO
 
 ;WITH DistinctLocalidad AS (
     SELECT DISTINCT Sucursal_Localidad AS nombre
@@ -314,7 +316,6 @@ SELECT
     ROW_NUMBER() OVER (ORDER BY nombre) AS loc_numero,
     nombre AS loc_nombre
 FROM DistinctLocalidad;
-GO
 
 ;WITH DistinctMaterial AS (
     SELECT DISTINCT
@@ -333,7 +334,6 @@ SELECT
     Material_Descripcion,
     Material_Precio
 FROM DistinctMaterial;
-GO
 
 INSERT INTO CNEJ.Modelo (mod_numero, mod_tipo, mod_descripcion, mod_precio)
 SELECT DISTINCT
@@ -343,7 +343,6 @@ SELECT DISTINCT
     Sillon_Modelo_Precio                      AS mod_precio
 FROM gd_esquema.Maestra
 WHERE Sillon_Modelo_Codigo IS NOT NULL;
-GO
 
 ;WITH DistinctMedida AS (
     SELECT DISTINCT
@@ -362,8 +361,13 @@ SELECT
     med_profundidad,
     med_precio
 FROM DistinctMedida;
+
+END;
 GO
 
+CREATE PROCEDURE sp_Migrar_EntidadesPrimarias AS
+BEGIN
+SET NOCOUNT ON;
 ;WITH CTE_Sucursal AS (
     SELECT DISTINCT
         CAST(Sucursal_NroSucursal AS BIGINT) AS suc_numero,
@@ -391,7 +395,6 @@ FROM CTE_Sucursal AS S
     LEFT JOIN CNEJ.Contacto AS C
         ON C.con_telefono = S.suc_telefono
        AND C.con_mail     = S.suc_mail;
-GO
 
 ;WITH CTE_Cliente AS (
     SELECT DISTINCT
@@ -427,7 +430,6 @@ FROM CTE_Cliente AS Cc
     LEFT JOIN CNEJ.Contacto AS C
         ON C.con_telefono = Cc.cli_telefono
        AND C.con_mail     = Cc.cli_mail;
-GO
 
 ;WITH CTE_SillonDistinct AS (
     SELECT
@@ -479,7 +481,12 @@ FROM CTE_SillonDistinct AS D
        AND M2.med_ancho       = D.Sillon_Medida_Ancho
        AND M2.med_profundidad = D.Sillon_Medida_Profundidad
        AND M2.med_precio      = D.Sillon_Medida_Precio;
+END;
 GO
+
+CREATE PROCEDURE sp_Migrar_Pedidos AS
+BEGIN
+SET NOCOUNT ON;
 
 INSERT INTO CNEJ.Pedido
     (ped_numero, ped_sucursal, ped_cliente, ped_fecha, ped_estado, ped_total)
@@ -492,7 +499,6 @@ SELECT DISTINCT
     CAST(Pedido_Total AS DECIMAL(18,2))     AS ped_total
 FROM gd_esquema.Maestra
 WHERE Pedido_Numero IS NOT NULL;
-GO
 
 ;WITH CTE_DetallePedidoGen AS (
     SELECT DISTINCT
@@ -501,7 +507,6 @@ GO
         CAST(Detalle_Pedido_Cantidad AS BIGINT)         AS det_pedi_cant,
         CAST(Detalle_Pedido_Precio   AS DECIMAL(18,2))  AS det_pedi_precio,
         CAST(Detalle_Pedido_SubTotal AS DECIMAL(18,2))  AS det_pedi_subt,
-
         ROW_NUMBER() OVER (
             ORDER BY 
                 CAST(Pedido_Numero AS DECIMAL(18,0)),
@@ -524,7 +529,12 @@ SELECT
     D.det_pedi_precio,
     D.det_pedi_subt
 FROM CTE_DetallePedidoGen AS D;
+END;
 GO
+
+CREATE PROCEDURE sp_Migrar_Facturacion AS
+BEGIN
+SET NOCOUNT ON;
 
 INSERT INTO CNEJ.Factura
     (fac_numero, fac_sucursal, fac_cliente, fac_fecha, fac_total)
@@ -536,7 +546,6 @@ SELECT DISTINCT
     CAST(Factura_Total AS DECIMAL(18,2))     AS fac_total
 FROM gd_esquema.Maestra
 WHERE Factura_Numero IS NOT NULL;
-GO
 
 ;WITH CTE_FirstDetallePedido AS (
     SELECT 
@@ -553,19 +562,21 @@ SELECT
             CAST(M.Factura_Numero AS BIGINT),
             CAST(M.Pedido_Numero  AS DECIMAL(18,0))
     ) AS det_fac_numero,
-
     F.first_det_ped_numero AS det_fac_det_pedido,
-
     CAST(M.Detalle_Factura_Precio    AS DECIMAL(18,2))  AS det_fac_precio,
     CAST(M.Detalle_Factura_Cantidad  AS DECIMAL(18,0))  AS det_fac_cantidad,
     CAST(M.Detalle_Factura_SubTotal  AS DECIMAL(18,2))  AS det_fac_subtotal,
-
     CAST(M.Factura_Numero AS BIGINT) AS det_fac_fac_num
 FROM gd_esquema.Maestra AS M
     INNER JOIN CTE_FirstDetallePedido AS F
         ON F.ped_numero = CAST(M.Pedido_Numero AS DECIMAL(18,0))
 WHERE M.Detalle_Factura_Precio IS NOT NULL;
+END;
 GO
+
+CREATE PROCEDURE sp_Migrar_Logistica AS
+BEGIN
+SET NOCOUNT ON;
 
 INSERT INTO CNEJ.Cancelacion
     (ped_canc_numero, can_pedido, can_fecha, can_motivo)
@@ -578,7 +589,6 @@ SELECT
     Pedido_Cancelacion_Motivo                        AS can_motivo
 FROM gd_esquema.Maestra
 WHERE Pedido_Cancelacion_Fecha IS NOT NULL;
-GO
 
 INSERT INTO CNEJ.Envio
     (env_numero, env_factura, env_fecha_programada, env_fecha_real,
@@ -593,7 +603,12 @@ SELECT DISTINCT
     CAST(Envio_Total           AS DECIMAL(18,2))         AS env_total
 FROM gd_esquema.Maestra
 WHERE Envio_Numero IS NOT NULL;
+END;
 GO
+
+CREATE PROCEDURE sp_Migrar_ProveedoresCompras AS
+BEGIN
+SET NOCOUNT ON;
 
 ;WITH CTE_Proveedor AS (
     SELECT DISTINCT
@@ -624,7 +639,6 @@ FROM CTE_Proveedor AS Pv
     LEFT JOIN CNEJ.Contacto AS C
         ON C.con_telefono = Pv.prov_telefono
        AND C.con_mail     = Pv.prov_mail;
-GO
 
 INSERT INTO CNEJ.Compra
     (com_numero, com_proveedor, com_fecha, com_sucursal, com_total)
@@ -636,7 +650,6 @@ SELECT DISTINCT
     CAST(Compra_Total AS DECIMAL(18,2))    AS com_total
 FROM gd_esquema.Maestra
 WHERE Compra_Numero IS NOT NULL;
-GO
 
 INSERT INTO CNEJ.Detalle_Compra
     (det_com_numero, mat_numero, com_numero, det_com_precio, det_com_cantidad, det_com_subtotal)
@@ -654,7 +667,12 @@ FROM gd_esquema.Maestra AS G
         ON M.mat_tipo   = G.Material_Tipo
        AND M.mat_nombre = G.Material_Nombre
 WHERE Detalle_Compra_Precio IS NOT NULL;
+END;
 GO
+
+CREATE PROCEDURE sp_Migrar_SubtiposMaterial AS
+BEGIN
+SET NOCOUNT ON;
 
 INSERT INTO CNEJ.Madera (mad_numero, mad_material, mad_color, mad_dureza)
 SELECT DISTINCT
@@ -667,7 +685,6 @@ FROM gd_esquema.Maestra AS G
         ON M.mat_tipo   = G.Material_Tipo
        AND M.mat_nombre = G.Material_Nombre
 WHERE G.Madera_Color IS NOT NULL;
-GO
 
 INSERT INTO CNEJ.Tela (tel_numero, tel_material, tel_color, tel_textura)
 SELECT DISTINCT
@@ -680,7 +697,6 @@ FROM gd_esquema.Maestra AS G
         ON M.mat_tipo   = G.Material_Tipo
        AND M.mat_nombre = G.Material_Nombre
 WHERE G.Tela_Color IS NOT NULL;
-GO
 
 INSERT INTO CNEJ.Relleno (rel_numero, rel_material, rel_densidad)
 SELECT DISTINCT
@@ -692,7 +708,16 @@ FROM gd_esquema.Maestra AS G
         ON M.mat_tipo   = G.Material_Tipo
        AND M.mat_nombre = G.Material_Nombre
 WHERE G.Relleno_Densidad IS NOT NULL;
+END;
 GO
+
+EXEC sp_Migrar_Dimensiones;
+EXEC sp_Migrar_EntidadesPrimarias;
+EXEC sp_Migrar_Pedidos;
+EXEC sp_Migrar_Facturacion;
+EXEC sp_Migrar_Logistica;
+EXEC sp_Migrar_ProveedoresCompras;
+EXEC sp_Migrar_SubtiposMaterial;
 
 EXEC sp_MSforeachtable 
     @command1 = '
