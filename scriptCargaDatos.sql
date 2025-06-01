@@ -310,27 +310,27 @@ GO
 
 
 --------------------------------------------------------------------------------
--- 5.2) POBLO DETALLE_PEDIDO (usando un CTE para generar det_ped_numero único)
+-- 5.2) POBLO DETALLE_PEDIDO (sólo filas con datos de Sillón)
 --------------------------------------------------------------------------------
 ;WITH CTE_DetallePedidoGen AS (
-    SELECT
-        -- Almacenamos cada combinación relevante de la Maestra:
+    SELECT DISTINCT
         CAST(Pedido_Numero           AS DECIMAL(18,0))  AS ped_numero,
         CAST(Sillon_Codigo           AS BIGINT)         AS sil_numero,
         CAST(Detalle_Pedido_Cantidad AS BIGINT)         AS det_pedi_cant,
         CAST(Detalle_Pedido_Precio   AS DECIMAL(18,2))  AS det_pedi_precio,
         CAST(Detalle_Pedido_SubTotal AS DECIMAL(18,2))  AS det_pedi_subt,
 
-        -- Generamos el det_ped_numero con ROW_NUMBER() en el mismo orden
         ROW_NUMBER() OVER (
-            ORDER BY Pedido_Numero,
-                     Sillon_Codigo,
-                     Detalle_Pedido_Cantidad,
-                     Detalle_Pedido_Precio,
-                     Detalle_Pedido_SubTotal
+            ORDER BY 
+                CAST(Pedido_Numero AS DECIMAL(18,0)),
+                CAST(Sillon_Codigo AS BIGINT),
+                CAST(Detalle_Pedido_Cantidad AS BIGINT),
+                CAST(Detalle_Pedido_Precio AS DECIMAL(18,2)),
+                CAST(Detalle_Pedido_SubTotal AS DECIMAL(18,2))
         ) AS det_ped_numero
     FROM gd_esquema.Maestra
     WHERE Detalle_Pedido_Cantidad IS NOT NULL
+      AND Sillon_Codigo IS NOT NULL
 )
 INSERT INTO CNEJ.Detalle_Pedido
     (det_ped_numero, sil_numero, ped_numero, det_ped_cantidad, det_ped_precio, det_ped_subtotal)
@@ -343,7 +343,6 @@ SELECT
     D.det_pedi_subt
 FROM CTE_DetallePedidoGen AS D;
 GO
-
 
 --------------------------------------------------------------------------------
 -- 5.3) POBLO FACTURA
@@ -362,56 +361,40 @@ GO
 
 
 --------------------------------------------------------------------------------
--- 5.4) POBLO DETALLE_FACTURA (uniéndome al CTE anterior para obtener det_ped_numero)
+-- 5.4) POBLO DETALLE_FACTURA (vinculando cada factura con la PRIMERA línea de pedido)
 --------------------------------------------------------------------------------
-;WITH CTE_DetallePedidoGen AS (
-    SELECT
-        CAST(Pedido_Numero           AS DECIMAL(18,0))  AS ped_numero,
-        CAST(Sillon_Codigo           AS BIGINT)         AS sil_numero,
-        CAST(Detalle_Pedido_Cantidad AS BIGINT)         AS det_pedi_cant,
-        CAST(Detalle_Pedido_Precio   AS DECIMAL(18,2))  AS det_pedi_precio,
-        CAST(Detalle_Pedido_SubTotal AS DECIMAL(18,2))  AS det_pedi_subt,
-        ROW_NUMBER() OVER (
-            ORDER BY Pedido_Numero,
-                     Sillon_Codigo,
-                     Detalle_Pedido_Cantidad,
-                     Detalle_Pedido_Precio,
-                     Detalle_Pedido_SubTotal
-        ) AS det_ped_numero
-    FROM gd_esquema.Maestra
-    WHERE Detalle_Pedido_Cantidad IS NOT NULL
+
+-- Primero, obtenemos para cada Pedido_Numero el "primer" det_ped_numero:
+;WITH CTE_FirstDetallePedido AS (
+    SELECT 
+        ped_numero,
+        MIN(det_ped_numero) AS first_det_ped_numero
+    FROM CNEJ.Detalle_Pedido
+    GROUP BY ped_numero
 )
 INSERT INTO CNEJ.Detalle_Factura
     (det_fac_numero, det_fac_det_pedido, det_fac_precio, det_fac_cantidad, det_fac_subtotal, det_fac_fac_num)
 SELECT
-    -- Generamos un PK artificial para Detalle_Factura (único en toda la tabla)
+    -- Genera un PK único para Detalle_Factura
     ROW_NUMBER() OVER (
-        ORDER BY Factura_Numero,
-                 Pedido_Numero,
-                 Detalle_Factura_Precio,
-                 Detalle_Factura_Cantidad,
-                 Detalle_Factura_SubTotal
+        ORDER BY 
+            CAST(M.Factura_Numero AS BIGINT),
+            CAST(M.Pedido_Numero  AS DECIMAL(18,0))
     ) AS det_fac_numero,
 
-    -- Aquí buscamos el det_ped_numero correcto en el CTE, haciendo JOIN por todos los campos que identifican la fila
-    D.det_ped_numero AS det_fac_det_pedido,
+    -- Tomamos el det_ped_numero “primero” de ese pedido:
+    F.first_det_ped_numero AS det_fac_det_pedido,
 
-    CAST(Detalle_Factura_Precio    AS DECIMAL(18,2)) AS det_fac_precio,
-    CAST(Detalle_Factura_Cantidad  AS DECIMAL(18,0)) AS det_fac_cantidad,
-    CAST(Detalle_Factura_SubTotal  AS DECIMAL(18,2)) AS det_fac_subtotal,
+    CAST(M.Detalle_Factura_Precio    AS DECIMAL(18,2))  AS det_fac_precio,
+    CAST(M.Detalle_Factura_Cantidad  AS DECIMAL(18,0))  AS det_fac_cantidad,
+    CAST(M.Detalle_Factura_SubTotal  AS DECIMAL(18,2))  AS det_fac_subtotal,
 
-    CAST(Factura_Numero AS BIGINT) AS det_fac_fac_num
+    CAST(M.Factura_Numero AS BIGINT) AS det_fac_fac_num
 FROM gd_esquema.Maestra AS M
-    -- Solo filas con detalle de factura
-    INNER JOIN CTE_DetallePedidoGen AS D
-        ON D.ped_numero = CAST(M.Pedido_Numero AS DECIMAL(18,0))
-       AND D.sil_numero = CAST(M.Sillon_Codigo AS BIGINT)
-       AND D.det_pedi_cant = CAST(M.Detalle_Pedido_Cantidad AS BIGINT)
-       AND D.det_pedi_precio = CAST(M.Detalle_Pedido_Precio AS DECIMAL(18,2))
-       AND D.det_pedi_subt = CAST(M.Detalle_Pedido_SubTotal AS DECIMAL(18,2))
+    INNER JOIN CTE_FirstDetallePedido AS F
+        ON F.ped_numero = CAST(M.Pedido_Numero AS DECIMAL(18,0))
 WHERE M.Detalle_Factura_Precio IS NOT NULL;
 GO
-
 
 --------------------------------------------------------------------------------
 -- 5.5) POBLO CANCELACION
