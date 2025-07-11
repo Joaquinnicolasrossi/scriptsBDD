@@ -90,7 +90,9 @@ CREATE TABLE CNEJ.BI_Dim_Turno (
 
 CREATE TABLE CNEJ.BI_Dim_RangoEtario (
     RangoKey         INT IDENTITY(1,1) PRIMARY KEY,
-    Rango            NVARCHAR(20) NOT NULL
+    Rango            NVARCHAR(20) NOT NULL,
+	RangoMin         TINYINT NOT NULL,
+	RangoMax         TINYINT NOT NULL
 );
 GO
 
@@ -161,8 +163,8 @@ INSERT INTO CNEJ.BI_Dim_Turno(Nombre,HoraInicio,HoraFin)
 VALUES ('08:00-14:00','08:00','14:00'),
        ('14:00-20:00','14:00','20:00');
 
-INSERT INTO CNEJ.BI_Dim_RangoEtario(Rango)
-VALUES ('<25'),('25-35'),('35-50'),('>50');
+INSERT INTO CNEJ.BI_Dim_RangoEtario(Rango, RangoMin, RangoMax)
+VALUES ('<25', 0, 24),('25-35', 25, 34),('35-50', 35, 49),('>50', 50, 100);
 GO
 
 /************************************ CREACION DE TABLAS DE HECHOS ************************************/
@@ -291,13 +293,7 @@ JOIN CNEJ.BI_Dim_Cliente     dc   ON dc.ClienteDni=p.ped_cliente
 JOIN CNEJ.BI_Dim_EstadoPedido de  ON de.Estado=p.ped_estado
 JOIN CNEJ.BI_Dim_Turno       dtur ON CONVERT(time,p.ped_fecha) >= dtur.HoraInicio
    AND CONVERT(time,p.ped_fecha) < dtur.HoraFin
-JOIN CNEJ.BI_Dim_RangoEtario dr   ON dr.Rango=
-       CASE
-         WHEN DATEDIFF(YEAR,dc.FechaNacimiento,p.ped_fecha)<25 THEN '<25'
-         WHEN DATEDIFF(YEAR,dc.FechaNacimiento,p.ped_fecha) BETWEEN 25 AND 35 THEN '25-35'
-         WHEN DATEDIFF(YEAR,dc.FechaNacimiento,p.ped_fecha) BETWEEN 36 AND 50 THEN '35-50'
-         ELSE '>50'
-       END
+JOIN CNEJ.BI_Dim_RangoEtario dr   ON DATEDIFF(YEAR, dc.FechaNacimiento, GETDATE()) BETWEEN dr.RangoMin AND dr.RangoMax
 JOIN CNEJ.Sucursal            s    ON s.suc_numero=p.ped_sucursal
 JOIN CNEJ.Provincia          pr    ON pr.pro_numero=s.suc_provincia
 JOIN CNEJ.Localidad          lo    ON lo.loc_numero=s.suc_localidad
@@ -353,12 +349,8 @@ JOIN CNEJ.BI_Dim_EstadoPedido AS de ON de.Estado         = p.ped_estado
 JOIN CNEJ.BI_Dim_Turno        AS tur
   ON CONVERT(time, f.fac_fecha) >= tur.HoraInicio
  AND CONVERT(time, f.fac_fecha) <  tur.HoraFin
-JOIN CNEJ.BI_Dim_RangoEtario  AS re
-  ON re.Rango = CASE
-       WHEN DATEDIFF(YEAR, dc.FechaNacimiento, f.fac_fecha) < 25 THEN '<25'
-       WHEN DATEDIFF(YEAR, dc.FechaNacimiento, f.fac_fecha) BETWEEN 25 AND 35 THEN '25-35'
-       WHEN DATEDIFF(YEAR, dc.FechaNacimiento, f.fac_fecha) BETWEEN 36 AND 50 THEN '35-50'
-       ELSE '>50' END
+JOIN CNEJ.BI_Dim_RangoEtario re 
+  ON DATEDIFF(YEAR, cli.cli_fecha_nac, GETDATE()) BETWEEN re.RangoMin AND re.RangoMax
 JOIN CNEJ.BI_Dim_Ubicacion    AS ub 
   ON ub.Provincia = pr.pro_nombre
  AND ub.Localidad = lo.loc_nombre
@@ -387,12 +379,8 @@ JOIN CNEJ.BI_Dim_Tiempo      AS dt
   ON dt.Anio         = YEAR(p.ped_fecha)
  AND dt.Mes          = MONTH(p.ped_fecha)
  AND dt.Cuatrimestre = ((MONTH(p.ped_fecha)-1)/4)+1
-JOIN CNEJ.BI_Dim_RangoEtario AS re 
-  ON re.Rango = CASE
-       WHEN DATEDIFF(YEAR, cli.cli_fecha_nac, p.ped_fecha) < 25 THEN '<25'
-       WHEN DATEDIFF(YEAR, cli.cli_fecha_nac, p.ped_fecha) BETWEEN 25 AND 35 THEN '25-35'
-       WHEN DATEDIFF(YEAR, cli.cli_fecha_nac, p.ped_fecha) BETWEEN 36 AND 50 THEN '35-50'
-       ELSE '>50' END
+JOIN CNEJ.BI_Dim_RangoEtario re 
+  ON DATEDIFF(YEAR, cli.cli_fecha_nac, GETDATE()) BETWEEN re.RangoMin AND re.RangoMax
 JOIN CNEJ.BI_Dim_Ubicacion   AS ub 
   ON ub.Provincia = pr.pro_nombre
  AND ub.Localidad = lo.loc_nombre
